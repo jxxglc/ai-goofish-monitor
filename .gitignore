@@ -1,7 +1,7 @@
 .idea
 *.iml
 xianyu_state.json
-.env
+
 .aider*
 images/
 logs/
