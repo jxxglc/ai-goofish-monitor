@@ -5,7 +5,7 @@ services:
     pull_policy: always
     init: true
     ports:
-      - "8000:8000"
+      - "9999:9999"
     env_file:
       - .env
     environment:

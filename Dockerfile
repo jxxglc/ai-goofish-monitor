@@ -52,7 +52,7 @@ COPY config.json.example /app/config.json.example
 
 RUN mkdir -p /app/data /app/state /app/logs /app/images /app/jsonl /app/price_history
 
-EXPOSE 8000
+EXPOSE 9999
 
 USER root
 

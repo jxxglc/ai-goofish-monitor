@@ -60,7 +60,7 @@ chmod +x start.sh
 
 ### First-Time Setup
 
-1. Open the default Web UI at `http://127.0.0.1:8000` and sign in.
+1. Open the default Web UI at `http://127.0.0.1:9999` and sign in.
 2. Go to "Xianyu Account Management" and use the [Chrome Extension](https://chromewebstore.google.com/detail/xianyu-login-state-extrac/eidlpfjiodpigmfcahkmlenhppfklcoa) to export and paste the Xianyu login-state JSON.
 3. Login-state files are stored in `state/`, for example `state/acc_1.json`.
 4. Go back to "Task Management", create a task, bind an account if needed, and run it.
@@ -82,7 +82,7 @@ docker compose logs -f app
 docker compose down
 ```
 
-- Default Web UI: `http://127.0.0.1:8000`
+- Default Web UI: `http://127.0.0.1:9999`
 - The published Docker image already includes Chromium, so no extra browser install is required on the host.
 - Update image: `docker compose pull && docker compose up -d`
 - If you change `SERVER_PORT` in `.env`, update the `ports` mapping in `docker-compose.yaml` as well.
@@ -139,7 +139,7 @@ docker compose down
 # backend
 python -m src.app
 # or
-uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn src.app:app --host 0.0.0.0 --port 9999 --reload
 
 # frontend
 cd web-ui
@@ -150,10 +150,10 @@ npm run dev
 - FastAPI initializes SQLite on startup and performs the one-time legacy import from `config.json/jsonl/price_history` when needed
 - `spider_v2.py` now loads tasks from SQLite by default; JSON config is only used when `--config <path>` is passed explicitly
 - The default local database path is `data/app.sqlite3`
-- The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:8000`.
+- The Vite dev server proxies `/api`, `/auth`, and `/ws` to `http://127.0.0.1:9999`.
 - `npm run build` writes `web-ui/dist/`, and `start.sh` copies it to the repository root `dist/`.
 - FastAPI serves `dist/index.html` and `dist/assets/` from the repository root.
-- `./start.sh` prints the default app URL `http://localhost:8000` and API docs URL `http://localhost:8000/docs`.
+- `./start.sh` prints the default app URL `http://localhost:9999` and API docs URL `http://localhost:9999/docs`.
 
 ### Validation
 
@@ -185,7 +185,7 @@ cd web-ui && npm run build
 - `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`: required AI model settings.
 - `PROXY_URL`: dedicated HTTP/SOCKS5 proxy for AI requests.
 - `RUN_HEADLESS`: whether the scraper runs headless; keep it `true` in Docker.
-- `SERVER_PORT`: backend port, default `8000`.
+- `SERVER_PORT`: backend port, default `9999`.
 - `LOGIN_IS_EDGE`: use Edge instead of Chrome locally; Docker images do not bundle Edge and always run with Chromium.
 - `PCURL_TO_MOBILE`: convert desktop item URLs to mobile URLs.
 

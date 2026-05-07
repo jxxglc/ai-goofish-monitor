@@ -341,8 +341,8 @@ echo -e "${GREEN}✓ 已确认构建产物位于项目根目录 dist/${NC}"
 echo -e "\n${YELLOW}[6/6] 启动后端服务...${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}服务启动中...${NC}"
-echo -e "${GREEN}访问地址: http://localhost:8000${NC}"
-echo -e "${GREEN}API 文档: http://localhost:8000/docs${NC}"
+echo -e "${GREEN}访问地址: http://localhost:9999${NC}"
+echo -e "${GREEN}API 文档: http://localhost:9999/docs${NC}"
 echo -e "${GREEN}========================================${NC}\n"
 
 python3 -m src.app

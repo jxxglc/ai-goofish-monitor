@@ -97,7 +97,7 @@ class ScraperSettings(_EnvSettings):
 
 class AppSettings(_EnvSettings):
     """应用主配置"""
-    server_port: int = _env_field(8000, "SERVER_PORT")
+    server_port: int = _env_field(9999, "SERVER_PORT")
     web_username: str = _env_field("admin", "WEB_USERNAME")
     web_password: str = _env_field("admin123", "WEB_PASSWORD")
     task_log_retention_days: int = _env_field(7, "TASK_LOG_RETENTION_DAYS", ge=1)

@@ -7,7 +7,7 @@
 - 运行数据与资源：`prompts/`、`jsonl/`、`logs/`、`images/`、`static/`、`state/`，配置文件 `config.json` 与 `.env` 位于仓库根目录。
 
 ## 构建、测试与本地开发
-- 后端开发：`python -m src.app` 或 `uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload`。
+- 后端开发：`python -m src.app` 或 `uvicorn src.app:app --host 0.0.0.0 --port 9999 --reload`。
 - 爬虫任务：`python spider_v2.py --task-name "MacBook Air M1" --debug-limit 3`（可用 `--config` 指定自定义配置）。
 - 前端开发：`cd web-ui && npm install && npm run dev`；构建：`cd web-ui && npm run build`（产物复制到根目录 `dist/`）。
 - 一键本地启动：`bash start.sh`（自动安装依赖、前端构建并启动后端）。
@@ -21,7 +21,7 @@
 ## 架构与运行时
 - 后端使用 FastAPI 提供 API 与静态资源，爬虫与 AI 推理在独立任务进程中协作，前后端通过 HTTP/Web UI 交互。
 - 任务运行会在 `jsonl/` 写入结果、在 `logs/` 留存运行日志、在 `images/` 下载图片，前端监控页面依赖这些数据。
-- 默认监听 8000 端口，前端构建后静态文件可由后端或 Docker 镜像直接提供。
+- 默认监听 9999 端口，前端构建后静态文件可由后端或 Docker 镜像直接提供。
 
 ## 测试指南
 - 测试框架：`pytest`（默认同步测试，无需 `pytest-asyncio`）。

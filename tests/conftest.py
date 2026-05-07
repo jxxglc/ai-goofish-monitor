@@ -44,7 +44,7 @@ def sample_task_payload():
         "analyze_images": True,
         "max_pages": 2,
         "personal_only": True,
-        "min_price": "8000",
+        "min_price": "9999",
         "max_price": "16000",
         "cron": "*/15 * * * *",
         "ai_prompt_base_file": "prompts/base_prompt.txt",

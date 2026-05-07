@@ -26,6 +26,6 @@ COPY prompts /app/prompts
 COPY static /app/static
 COPY config.json.example /app/config.json.example
 
-EXPOSE 8000
+EXPOSE 9999
 
 CMD ["python", "-m", "src.app"]

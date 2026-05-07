@@ -38,7 +38,7 @@ API层 (src/api/routes/)
 # 后端开发
 python -m src.app
 # 或
-uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload
+uvicorn src.app:app --host 0.0.0.0 --port 9999 --reload
 
 # 前端开发
 cd web-ui && npm install && npm run dev

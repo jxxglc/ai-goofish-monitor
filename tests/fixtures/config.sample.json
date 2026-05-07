@@ -6,7 +6,7 @@
     "description": "body only",
     "max_pages": 2,
     "personal_only": true,
-    "min_price": "8000",
+    "min_price": "9999",
     "max_price": "16000",
     "cron": "*/15 * * * *",
     "ai_prompt_base_file": "prompts/base_prompt.txt",
