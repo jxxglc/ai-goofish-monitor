@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import random
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlencode
@@ -124,6 +123,14 @@ async def _notify_task_failure(
         for marker in (
             "未找到可用的代理地址",
             "未找到可用的登录状态文件",
+            "Login required",
+            "baxia-dialog",
+            "J_MIDDLEWARE_FRAME_WIDGET",
+            "FAIL_SYS_USER_VALIDATE",
+            "risk-control",
+            "登录失效",
+            "验证触发",
+            "风控",
         )
     )
 
@@ -179,6 +186,16 @@ def _as_int(value, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _get_max_new_items_per_run(task_config: dict) -> int:
+    configured = task_config.get("max_new_items_per_run")
+    default = _as_int(os.getenv("SCRAPER_MAX_NEW_ITEMS_PER_RUN"), 12)
+    return max(0, _as_int(configured, default))
+
+
+def _get_seller_profile_scroll_limit() -> int:
+    return max(0, _as_int(os.getenv("SELLER_PROFILE_MAX_SCROLLS"), 2))
 
 
 def _get_rotation_settings(task_config: dict) -> dict:
@@ -351,6 +368,7 @@ async def scrape_user_profile(context, user_id: str) -> dict:
 
     all_items, all_ratings = [], []
     stop_item_scrolling, stop_rating_scrolling = asyncio.Event(), asyncio.Event()
+    profile_scroll_limit = _get_seller_profile_scroll_limit()
 
     async def handle_response(response: Response):
         # 捕获头部摘要API
@@ -402,8 +420,15 @@ async def scrape_user_profile(context, user_id: str) -> dict:
         # --- 任务2: 滚动加载所有商品 (默认页面) ---
         print("      [采集阶段] 开始采集该用户的商品列表...")
         await random_sleep(2, 4)  # 等待第一页商品API完成
+        item_scroll_count = 0
         while not stop_item_scrolling.is_set():
+            if profile_scroll_limit and item_scroll_count >= profile_scroll_limit:
+                print(
+                    f"      [节流] 已达到卖家商品列表滚动上限 {profile_scroll_limit} 次。"
+                )
+                break
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            item_scroll_count += 1
             try:
                 await asyncio.wait_for(stop_item_scrolling.wait(), timeout=8)
             except asyncio.TimeoutError:
@@ -418,8 +443,15 @@ async def scrape_user_profile(context, user_id: str) -> dict:
             await rating_tab_locator.click()
             await random_sleep(3, 5)  # 等待第一页评价API完成
 
+            rating_scroll_count = 0
             while not stop_rating_scrolling.is_set():
+                if profile_scroll_limit and rating_scroll_count >= profile_scroll_limit:
+                    print(
+                        f"      [节流] 已达到卖家评价列表滚动上限 {profile_scroll_limit} 次。"
+                    )
+                    break
                 await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                rating_scroll_count += 1
                 try:
                     await asyncio.wait_for(stop_rating_scrolling.wait(), timeout=8)
                 except asyncio.TimeoutError:
@@ -464,6 +496,11 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
     if new_publish_option == "__none__":
         new_publish_option = ""
     region_filter = (task_config.get("region") or "").strip()
+    max_new_items_per_run = _get_max_new_items_per_run(task_config)
+    if max_new_items_per_run:
+        log_time(f"本次任务最多处理 {max_new_items_per_run} 个新商品，达到后自动停止。")
+    else:
+        log_time("本次任务未限制新商品处理数量。")
 
     processed_links = set()
     history_run_id = datetime.now().strftime("%Y%m%d%H%M%S")
@@ -550,15 +587,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
             print(f"警告：读取登录状态文件失败，将直接按路径使用: {e}")
 
         async with async_playwright() as p:
-            # 反检测启动参数
-            launch_args = [
-                "--disable-blink-features=AutomationControlled",
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-                "--disable-setuid-sandbox",
-                "--disable-web-security",
-                "--disable-features=IsolateOrigins,site-per-process",
-            ]
+            launch_args = ["--disable-dev-shm-usage"]
+            if RUNNING_IN_DOCKER:
+                launch_args.extend(["--no-sandbox", "--disable-setuid-sandbox"])
 
             launch_kwargs = {"headless": RUN_HEADLESS, "args": launch_args}
             if proxy_server:
@@ -607,44 +638,18 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 saver=save_to_jsonl,
             )
 
-            # 增强反检测脚本（模拟真实移动设备）
-            await context.add_init_script("""
-                // 移除webdriver标识
-                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-
-                // 模拟真实移动设备的navigator属性
-                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-                Object.defineProperty(navigator, 'languages', {get: () => ['zh-CN', 'zh', 'en-US', 'en']});
-
-                // 添加chrome对象
-                window.chrome = {runtime: {}, loadTimes: function() {}, csi: function() {}};
-
-                // 模拟触摸支持
-                Object.defineProperty(navigator, 'maxTouchPoints', {get: () => 5});
-
-                // 覆盖permissions查询（避免暴露自动化）
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                        Promise.resolve({state: Notification.permission}) :
-                        originalQuery(parameters)
-                );
-            """)
-
             page = await context.new_page()
 
             try:
-                # 步骤 0 - 模拟真实用户：先访问首页（重要的反检测措施）
-                log_time("步骤 0 - 模拟真实用户访问首页...")
+                log_time("步骤 0 - 访问首页，确认登录态和网络状态...")
                 await page.goto(
                     "https://www.goofish.com/",
                     wait_until="domcontentloaded",
                     timeout=30000,
                 )
-                log_time("[反爬] 在首页停留，模拟浏览...")
+                log_time("[节流] 首页加载后短暂停留...")
                 await random_sleep(1, 2)
 
-                # 模拟随机滚动（移动设备的触摸滚动）
                 await page.evaluate("window.scrollBy(0, Math.random() * 500 + 200)")
                 await random_sleep(1, 2)
 
@@ -679,8 +684,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         ) from e
                     raise
 
-                # 模拟真实用户行为：页面加载后的初始停留和浏览
-                log_time("[反爬] 模拟用户查看页面...")
+                log_time("[节流] 搜索结果页加载后短暂停留...")
                 await random_sleep(1, 3)
 
                 # --- 新增：检查是否存在验证弹窗 ---
@@ -695,10 +699,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     print("检测到闲鱼反爬虫验证弹窗 (baxia-dialog)，无法继续操作。")
                     print("这通常是因为操作过于频繁或被识别为机器人。")
                     print("建议：")
-                    print("1. 停止脚本一段时间再试。")
-                    print(
-                        "2. (推荐) 在 .env 文件中设置 RUN_HEADLESS=false，以非无头模式运行，这有助于绕过检测。"
-                    )
+                    print("1. 先停止该账号的自动任务，等待暂停窗口结束后再试。")
+                    print("2. 降低 max_pages / SCRAPER_MAX_NEW_ITEMS_PER_RUN，并增大 SCRAPER_DELAY_MULTIPLIER。")
+                    print("3. 更新登录态后再恢复任务。")
                     print(f"任务 '{keyword}' 将在此处中止。")
                     print(
                         "==================================================================="
@@ -721,7 +724,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     print("建议：")
                     print("1. 停止脚本一段时间再试。")
                     print("2. (推荐) 更新登录状态文件，确保登录状态有效。")
-                    print("3. 降低任务执行频率，避免被识别为机器人。")
+                    print("3. 降低任务执行频率和单次处理数量。")
                     print(f"任务 '{keyword}' 将在此处中止。")
                     print(
                         "==================================================================="
@@ -921,9 +924,9 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                 for page_num in range(1, max_pages + 1):
                     if stop_scraping:
                         break
-                    log_time(f"开始处理第 {page_num}/{max_pages} 页 ...")
 
                     if page_num > 1:
+                        log_time(f"准备翻到第 {page_num}/{max_pages} 页 ...")
                         page_advance_result = await advance_search_page(
                             page=page,
                             page_num=page_num,
@@ -932,6 +935,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             break
                         current_response = page_advance_result.response
 
+                    log_time(f"开始处理第 {page_num}/{max_pages} 页 ...")
                     if not (current_response and current_response.ok):
                         log_time(f"第 {page_num} 页响应无效，跳过。")
                         continue
@@ -960,6 +964,15 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                             )
                             stop_scraping = True
                             break
+                        if (
+                            max_new_items_per_run > 0
+                            and processed_item_count >= max_new_items_per_run
+                        ):
+                            log_time(
+                                f"已达到本次任务新商品处理上限 ({max_new_items_per_run})，停止获取详情。"
+                            )
+                            stop_scraping = True
+                            break
 
                         unique_key = get_link_unique_key(item_data["商品链接"])
                         if unique_key in processed_links:
@@ -971,7 +984,7 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         log_time(
                             f"[页内进度 {i}/{total_items_on_page}] 发现新商品，获取详情: {item_data['商品标题'][:30]}..."
                         )
-                        # --- 修改: 访问详情页前的等待时间，模拟用户在列表页上看了一会儿 ---
+                        # 访问详情页前做节流，避免连续打开大量详情页。
                         await random_sleep(2, 4)  # 原来是 (2, 4)
 
                         detail_page = await context.new_page()
@@ -999,16 +1012,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     print(
                                         "检测到闲鱼反爬虫验证 (FAIL_SYS_USER_VALIDATE)，程序将终止。"
                                     )
-                                    long_sleep_duration = random.randint(3, 60)
-                                    print(
-                                        f"为避免账户风险，将执行一次长时间休眠 ({long_sleep_duration} 秒) 后再退出..."
-                                    )
-                                    await asyncio.sleep(long_sleep_duration)
-                                    print("长时间休眠结束，现在将安全退出。")
+                                    print("为避免账户风险，将停止本次任务并交给失败保护暂停后续重试。")
                                     print(
                                         "==================================================================="
                                     )
-                                    raise RiskControlError("FAIL_SYS_USER_VALIDATE")
+                                    raise RiskControlError(
+                                        "risk-control: FAIL_SYS_USER_VALIDATE"
+                                    )
 
                                 # 解析商品详情数据并更新 item_data
                                 item_do = await safe_get(
@@ -1106,10 +1116,8 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                     f"商品已提交后台分析。累计处理 {processed_item_count} 个新商品。"
                                 )
 
-                                # --- 修改: 增加单个商品处理后的主要延迟 ---
-                                log_time(
-                                    "[反爬] 执行一次主要的随机延迟以模拟用户浏览间隔..."
-                                )
+                                # 增加单个商品处理后的主要节流间隔。
+                                log_time("[节流] 单个商品处理完成，等待后继续...")
                                 await random_sleep(5, 10)
                             else:
                                 print(

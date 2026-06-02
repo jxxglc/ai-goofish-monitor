@@ -23,7 +23,10 @@ try:
     from zoneinfo import ZoneInfo  # py3.9+
 
     def _load_tz(name: str):
-        return ZoneInfo(name)
+        try:
+            return ZoneInfo(name)
+        except Exception:
+            return None
 
 
 except Exception:  # pragma: no cover
@@ -93,18 +96,30 @@ class _FileLock:
 
     def __enter__(self):
         try:
-            import fcntl
+            if os.name == "nt":
+                import msvcrt
 
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
+                self._fh.seek(0)
+                msvcrt.locking(self._fh.fileno(), msvcrt.LK_LOCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
         except Exception:
             pass
         return self
 
     def __exit__(self, exc_type, exc, tb):
         try:
-            import fcntl
+            if os.name == "nt":
+                import msvcrt
 
-            fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
+                self._fh.seek(0)
+                msvcrt.locking(self._fh.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(self._fh.fileno(), fcntl.LOCK_UN)
         except Exception:
             pass
         return False
@@ -135,12 +150,20 @@ def _read_json_file(path: str) -> dict:
 
 def _atomic_write_json(path: str, data: dict) -> None:
     _ensure_parent_dir(path)
-    tmp = f"{path}.tmp"
+    tmp = f"{path}.{os.getpid()}.tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2, sort_keys=True)
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, path)
+    last_error = None
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(0.05 * (attempt + 1))
+    raise last_error or PermissionError(path)
 
 
 @dataclass(frozen=True)
@@ -188,9 +211,9 @@ class FailureGuard:
 
     def _update_task(self, task_key: str, updater) -> dict:
         _ensure_parent_dir(self.path)
-        with open(self.path, "a+", encoding="utf-8") as fh:
+        lock_path = f"{self.path}.lock"
+        with open(lock_path, "a+", encoding="utf-8") as fh:
             with _FileLock(fh):
-                fh.seek(0)
                 data = self._load()
                 tasks = data.setdefault("tasks", {})
                 entry = tasks.get(task_key) or {}

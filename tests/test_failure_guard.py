@@ -74,3 +74,13 @@ def test_failure_guard_auto_recovers_on_cookie_change(tmp_path):
         now=base + timedelta(minutes=1),
     )
     assert recovered.skip is False
+
+
+def test_failure_guard_falls_back_when_timezone_data_is_missing(tmp_path):
+    guard_path = tmp_path / "guard.json"
+    guard = FailureGuard(path=str(guard_path), tz_name="Missing/Timezone")
+
+    guard.record_success("task-a")
+
+    assert guard_path.exists()
+    assert "task-a" in guard_path.read_text(encoding="utf-8")

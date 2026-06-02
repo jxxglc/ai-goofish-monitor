@@ -4,6 +4,7 @@ from src.services.result_storage_service import load_all_result_records
 from src.utils import (
     format_registration_days,
     get_link_unique_key,
+    random_sleep,
     safe_get,
     save_to_jsonl,
 )
@@ -23,6 +24,26 @@ def test_format_registration_days():
 def test_get_link_unique_key():
     link = "https://www.goofish.com/item?id=123&foo=bar"
     assert get_link_unique_key(link) == "https://www.goofish.com/item?id=123"
+
+
+def test_random_sleep_applies_delay_multiplier(monkeypatch):
+    seen = {}
+
+    def fake_uniform(low, high):
+        seen["range"] = (low, high)
+        return high
+
+    async def fake_sleep(delay):
+        seen["delay"] = delay
+
+    monkeypatch.setenv("SCRAPER_DELAY_MULTIPLIER", "2")
+    monkeypatch.setattr("src.utils.random.uniform", fake_uniform)
+    monkeypatch.setattr("src.utils.asyncio.sleep", fake_sleep)
+
+    asyncio.run(random_sleep(1, 2))
+
+    assert seen["range"] == (2, 4)
+    assert seen["delay"] == 4
 
 
 def test_save_to_jsonl(tmp_path, monkeypatch):

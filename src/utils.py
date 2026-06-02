@@ -48,6 +48,13 @@ def retry_on_failure(retries=3, delay=5):
     return decorator
 
 
+def _as_float(value, default: float) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
 async def safe_get(data, *keys, default="暂无"):
     """安全获取嵌套字典值"""
     for key in keys:
@@ -60,8 +67,14 @@ async def safe_get(data, *keys, default="暂无"):
 
 async def random_sleep(min_seconds: float, max_seconds: float):
     """异步等待一个在指定范围内的随机时间。"""
-    delay = random.uniform(min_seconds, max_seconds)
-    print(f"   [延迟] 等待 {delay:.2f} 秒... (范围: {min_seconds}-{max_seconds}s)")
+    multiplier = max(0.1, _as_float(os.getenv("SCRAPER_DELAY_MULTIPLIER"), 1.5))
+    effective_min = min_seconds * multiplier
+    effective_max = max_seconds * multiplier
+    delay = random.uniform(effective_min, effective_max)
+    print(
+        f"   [节流] 等待 {delay:.2f} 秒... "
+        f"(基础范围: {min_seconds}-{max_seconds}s, 倍数: {multiplier:g})"
+    )
     await asyncio.sleep(delay)
 
 
